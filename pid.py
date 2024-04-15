@@ -1,23 +1,4 @@
-import math
-
-
-def zoh_Fy(TfTs, Tx=1.0):
-
-    # Help variables
-    h1 = Tx / TfTs
-    h2 = math.exp(-h1)
-    h3 = h1 * h2
-    h4 = h3 / TfTs
-
-    # Filter parameters
-    a11 = h2 + h3
-    a12 = h2
-    a21 = -h4
-    a22 = h2 - h3
-    b1 = 1 - h2 - h3
-    b2 = h4
-
-    return a11, a12, a21, a22, b1, b2
+from filters import Fy
 
 
 def anti_windup(Dui, windup):
@@ -29,50 +10,18 @@ def anti_windup(Dui, windup):
     return Dui
 
 
-class Fy:
-
-    def __init__(self, TfTs=10.0, Tx=1.0):
-
-        # Params
-        self.TfTs = TfTs  # Tf per nominal Ts
-        self.discretize(Tx)
-
-        # Filter state
-        self.yf = None
-        self.dyf = None
-        self.Tx_old = None
-
-    def discretize(self, Tx):
-        self.a11, self.a12, self.a21, self.a22, self.b1, self.b2 = zoh_Fy(self.TfTs, Tx)
-
-    def __call__(self, y, Tx=1.0):
-
-        if Tx != self.Tx_old:
-            # Rediscretize to match execution period
-            self.discretize(Tx)
-
-        # State update
-        yf1 = self.yf
-        self.Tx_old = Tx
-        self.yf = self.a11 * yf1 + self.a12 * self.dyf + self.b1 * y
-        self.dyf = self.a21 * yf1 + self.a22 * self.dyf + self.b2 * y
-
-        return self.yf, self.dyf
-
-
 class PID:
 
-    def __init__(self):
+    def __init__(self, kp, ki, kd, umin, umax, u0, b=1):
 
         # Initialize parameter states
-        self.kp = None
-        self.kp = None
-        self.ki = None
-        self.kd = None
-        self.umin = None
-        self.umax = None
-        self.u0 = None
-        self.b = 1
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.umin = umin
+        self.umax = umax
+        self.u0 = u0
+        self.b = b
 
         # Initialize signal states
         self.u_old = None
@@ -95,21 +44,21 @@ class PID:
                 self.b = 1
 
             if track:  # Tracking mode
-                u_old = utrack
-                up_old = 0
-                ud_old = 0
-                uff_old = 0
+                self.u_old = utrack
+                self.up_old = 0
+                self.ud_old = 0
+                self.uff_old = 0
 
             # Control signal increments
-            Dup = self.kp * (self.b * r - yf) - up_old
+            Dup = self.kp * (self.b * r - yf) - self.up_old
             Dui = self.ki * (r - yf) * Tx
             Dui = anti_windup(Dui, windup)
-            Dud = (-self.kd * dyf - ud_old) / Tx
-            Duff = uff - uff_old
+            Dud = (-self.kd * dyf - self.ud_old) / Tx
+            Duff = uff - self.uff_old
 
             # Add control signal increment
             Du = Dup + Dui + Dud + Duff
-            u = u_old + Du
+            u = self.u_old + Du
 
         else:
             u = uman # Manual control signal
